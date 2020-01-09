@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+  <meta charset="utf-8" />
+
+  <!-- Charger les digits MNIST : https://github.com/cazala/mnist -->
+  <script src="digits/all09.js"></script>
+  <script src="mnist.js"></script>
+
+  <!-- ConvNetJS : réseaux de neurones (à convolution) facilement : https://cs.stanford.edu/people/karpathy/convnetjs/ -->
+  <script src="convnet-min.js"></script>
+
+  <!-- Permet de charger un réseau préentraîné -->
+  <script src="pretrained.js"></script>
+  <!-- Permet de charger un réseau préentraîné sur des pixels binaires -->
+  <script src="pretrained_binary.js"></script>
+
+  <!-- Définition et création du réseau de neurones et des méthodes pour l'entraîner et le tester -->
+  <script src="nndef.js"></script>
+
+  <!-- Outils et méthodes permettant de dessiner à la souris dans un canvas -->
+  <script src="drawable_canvas.js"></script>
+</head>
+
+<body>
+  <p>
+    <h3>Structure du réseau de neurones :</h3>
+    <ul>
+      <li>Images 28x28 provenant de la base de données <a href="http://yann.lecun.com/exdb/mnist/">MNIST</a></li>
+      <li>Images transformées en matrice 28x28x1 puis coupées en une matrice 24x24x1 pour améliorer la généralisation du réseau</li>
+      <li>Couche d'entrée : matrice 24x24x1 (soit 576 valeurs numériques)</li>
+      <li>Couche de convolution contenant 8 filtres</li>
+      <li>Couche de pooling</li>
+      <li>Couche de convolution contenant 16 filtres</li>
+      <li>Couche de pooling</li>
+      <li>Couche de sortie : matrice de dimensions 1x1x10, correspondant à fonction mathématique softmax : les 10 valeurs de sorties représentent une probabilité et leur somme vaut 1</li> 
+    </ul>
+  <p>
+
+  <input type="button" value="Charger un réseau préentraîné (5000 fois)" onclick="loadPretrained();" />
+  <input type="button" value="Réinitialiser le réseau de neurones" onclick="initNN();" />
+  <input type="radio" name="preProcessing" id="noPreprocessingRadio" onclick="preprocessing=no_preprocessing;" /><label for="noPreprocessingRadio">Prétraitement : sans</label>
+  <input type="radio" name="preProcessing" id="binaryPreprocessingRadio" onclick="preprocessing=preprocessing_binary;" /><label for="binaryPreprocessingRadio">Prétraitement : pixels binaires</label>
+
+  <p>
+    <input type="radio" id="modeTraining" name="mode" value="training" /><label for="modeTraining">Entraîner</label>
+    <input type="radio" id="modeTesting" name="mode" value="testing" /><label for="modeTesting">Tester</label>
+  </p>
+
+  <input id="autoButton" type="button" value="Entraîner" /><input id="autoNumber" type="number" min="1" max="10000" value="100" step="1" /> fois le réseau de neurones<p>
+
+  <p>
+    <p id="status"></p>
+    <progress id="currentProgress" value="0" max="100">0%</progress>
+  </p>
+
+  <fieldset>
+    <legend>Statistiques (seules les boucles d'entraînement et de tests sont prises en compte)</legend>
+    <h3>Entraînements</h3>
+    Effectués : <span id="doneTrainings">0</span><br />
+    Précision (expérimental) : <span id="accuracy">-</span><br />
+    <h3>Tests</h3>
+    Effectués : <span id="doneTests">0</span><br />
+    Réussis : <span id="successfulTests">0</span><br />
+    Manqués : <span id="missedTests">0</span><br />
+    Ratio (réussis / total) : <span id="testRatio">-</span><br />
+    <p><input type="button" id="resetStats" value="Réinitialiser" /></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Test simple</legend>
+    <input type="button" id="singleTesting" value="Test simple" />
+    <input type="button" id="transferToDrawable" value="Transférer au canvas de dessin" />
+    <p>
+      Image : <canvas id="singleTestingDigit" width="28" height="28">Merci de mettre à jour votre navigateur</canvas><br />
+      <canvas id="redimTestingDigit" style="display:none;position:absolute;z-index:9999;top:50%;left:50%;" width="500" height="500"></canvas>
+      Résultat obtenu : <span id="singleTestingPrediction"></span><br />
+      Résultat attendu : <span id="singleTestingExpected"></span><br />
+    </p>
+  </fieldset>
+
+  <div>
+    <div id="drawableCanvas"></div>
+    <input type="button" id="clearDrawableCanvas" value="Effacer" />
+    <input type="button" id="predictDrawableCanvas" value="Prédire" />
+    <input type="button" value="Charger un réseau préentraîné avec des pixels binaires (5000 fois)" onclick="loadPretrainedBinary();" />
+    <p style="position:absolute;background-color:red;top:1000px;left:40%;font-size:1.5em;" id="predictedDrawableDigit"></p>
+    <p>
+      <h3>Choix du pinceau</h3>
+      <img src="img/filtre1.png" style="cursor:pointer;" onclick="changeFilter(0);" />
+      <img src="img/filtre2.png" style="cursor:pointer;" onclick="changeFilter(1);" />
+      <img src="img/filtre3.png" style="cursor:pointer;" onclick="changeFilter(2);" />
+      <img src="img/filtre4.png" style="cursor:pointer;" onclick="changeFilter(3);" />
+    </p>
+  </div>
+
+  <div>
+    Les imprécisions du réseau de neurones par rapport aux chiffres dessinés à la main sont liées à :
+    <ul>
+      <li>Les données MNIST sont en fait des chiffres dessinés à la main puis numérisés : on retrouve plusieurs styles d'écriture et des formes et mouvements particuliers que l'on fait au stylo mais pas à la souris</li>
+      <li>Les données MNIST sont encodées d'une certaine façon, et les niveaux de gris sont bien plus précis que celles que l'on dessine ici. Une solution est de prétraiter les données afin de supprimer les niveaux de gris pour retrouver des valeurs binaires : 0 pour noir et 1 pour blanc (mais pas de valeurs comme 0.026)</li>
+      <li>Enfin, la diversité des données est importante. Ici, le réseau de neurones est entraîné sur un nombre très limité de données, et il est possible que quelqu'un ait une façon bien particulière d'écrire tel ou tel chiffre et que le réseau de neurones ne parvienne pas à l'identifier : la démarche est probabiliste</li>
+      <li>La taille des chiffres dessinés par rapport à la taille de l'image est aussi très importante : une convolution traite l'image tuile par tuile, et demander au réseau de reconnaître une forme alors qu'elle est 2 à 3 fois plus petite/grande que la taille des formes avec lesquelles le réseau a été entraîné provoquera un résultat incertain</li>
+      <li>De par leur forme bien particulière, les chiffres 0, 2, 3, 4 sont les plus faciles à reconnaître pour le réseau</li>
+      <li>Si on voulait vraiment rendre le réseau de neurones efficace à la reconnaissance des chiffres dessinés, il aurait fallu l'entraîner uniquement avec des chiffres dessinés, et non pas partir d'un dataset déjà prêt.</li>
+    </ul>
+  </div>
+
+  <!-- Gestion de l'interface et lien entre celle-ci et le réseau de neurones -->
+  <script src="interface.js"></script>
+
+  <!-- Programme principal -->
+  <script src="main.js"></script>
+</body>
+
+</html>
